@@ -22,6 +22,22 @@ import { debug } from "./hook-io.ts";
 import { qmdArgsWithIndex } from "./session-start.ts";
 
 /**
+ * Resolve the debounce sentinel path from the environment. Empty values are
+ * common in shell and CI configuration (`QMD_REFRESH_SENTINEL=`); treating an
+ * empty or whitespace-only value as a real path disables the debounce and
+ * makes the hook attempt to write to an invalid path.
+ */
+export function sentinelPathFrom(
+	env: Readonly<Record<string, string | undefined>>,
+	scriptDir: string,
+): string {
+	const configured = env["QMD_REFRESH_SENTINEL"];
+	return configured && configured.trim() !== ""
+		? configured
+		: resolvePath(scriptDir, ".qmd-refresh-sentinel");
+}
+
+/**
  * Path segments that must never trigger a QMD refresh — writes into these
  * aren't vault content. Matched case-sensitively against the forward-slash
  * normalized path; Windows paths are normalized by the caller before this

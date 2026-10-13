@@ -20,8 +20,10 @@ import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { debug, readStdinJson } from "./lib/hook-io.ts";
 import { isMainModule } from "./lib/main-guard.ts";
-import { triggerDebouncedRefresh } from "./lib/qmd-refresh.ts";
+import { sentinelPathFrom, triggerDebouncedRefresh } from "./lib/qmd-refresh.ts";
 import { resolveProjectDir } from "./lib/project-dir.ts";
+
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 
 type HookInput = {
 	readonly transcript_path?: unknown;
@@ -71,12 +73,9 @@ if (isMainModule(import.meta.url)) {
 	// an index that's already current. Uses the same sentinel as the
 	// PostToolUse and Stop hooks so we never spawn a redundant worker.
 	{
-		const scriptDir = dirname(fileURLToPath(import.meta.url));
 		triggerDebouncedRefresh({
-			sentinelPath:
-				process.env["QMD_REFRESH_SENTINEL"] ??
-				join(scriptDir, ".qmd-refresh-sentinel"),
-			workerPath: resolvePath(scriptDir, "qmd-refresh-run.ts"),
+			sentinelPath: sentinelPathFrom(process.env, SCRIPT_DIR),
+			workerPath: resolvePath(SCRIPT_DIR, "qmd-refresh-run.ts"),
 			debounceMs: 30_000,
 			logPrefix: "pre-compact",
 		});

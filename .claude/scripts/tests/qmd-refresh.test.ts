@@ -27,12 +27,32 @@ import {
 	pendingPathFor,
 	planRefresh,
 	resolveVaultRoot,
+	sentinelPathFrom,
 	shouldRefreshForPath,
 	triggerDebouncedRefresh,
 	REFRESH_SWITCH,
 	refreshDisabled,
 } from "../lib/qmd-refresh.ts";
 import { rmTemp, waitFor } from "./_helpers.ts";
+
+describe("sentinelPathFrom", () => {
+	const scriptDir = "/vault/.claude/scripts";
+	const fallback = resolvePath(scriptDir, ".qmd-refresh-sentinel");
+
+	test("uses the default path when the variable is absent", () => {
+		assert.equal(sentinelPathFrom({}, scriptDir), fallback);
+	});
+	test("uses the default path when the variable is empty or whitespace", () => {
+		assert.equal(sentinelPathFrom({ QMD_REFRESH_SENTINEL: "" }, scriptDir), fallback);
+		assert.equal(sentinelPathFrom({ QMD_REFRESH_SENTINEL: "  \t" }, scriptDir), fallback);
+	});
+	test("preserves an explicitly configured path", () => {
+		assert.equal(
+			sentinelPathFrom({ QMD_REFRESH_SENTINEL: "/tmp/custom-sentinel" }, scriptDir),
+			"/tmp/custom-sentinel",
+		);
+	});
+});
 
 /**
  * The debounce used to fire on the leading edge only: a note written inside
