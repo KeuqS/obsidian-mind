@@ -535,6 +535,67 @@ describe("a superseded memory reaches only where its successor reaches", () => {
 	});
 });
 
+describe("same-title supersession", () => {
+	const TITLE = "tokens expire after one hour";
+
+	const version = (
+		rel: string,
+		date: string,
+		fm: Record<string, unknown> = {},
+	): MemoryEntry => ({
+		rel,
+		full: `/nowhere/${rel}`,
+		facets: facetsOf({ source: MEMORY_SOURCE, date, ...fm }),
+		title: TITLE,
+		body: "b",
+	});
+
+	test("does not serve the old copy when it precedes a same-title correction", () => {
+		const old = version("memories/2026/06/old.md", "2026-06-01", {
+			scope: "general",
+			superseded_by: [TITLE],
+		});
+		const correction = version("memories/2026/07/correction.md", "2026-07-26", {
+			scope: "project",
+			projects: ["atlas"],
+		});
+		assert.deepEqual(recallFrom([old, correction], CALLERS.harbor), []);
+	});
+
+	test("does not depend on listing order for same-title memories", () => {
+		const old = version("memories/2026/06/old.md", "2026-06-01", {
+			scope: "general",
+			superseded_by: [TITLE],
+		});
+		const correction = version("memories/2026/07/correction.md", "2026-07-26", {
+			scope: "project",
+			projects: ["atlas"],
+		});
+		assert.deepEqual(recallFrom([correction, old], CALLERS.harbor), []);
+	});
+
+	test("follows a three-link same-title chain to the newest version", () => {
+		const old = version("memories/2026/06/old.md", "2026-06-01", {
+			scope: "general",
+			superseded_by: [TITLE],
+		});
+		const middle = version("memories/2026/07/middle.md", "2026-07-01", {
+			scope: "general",
+			superseded_by: [TITLE],
+		});
+		const newest = version("memories/2026/08/newest.md", "2026-08-01", {
+			scope: "project",
+			projects: ["atlas"],
+		});
+		assert.deepEqual(recallFrom([old, middle, newest], CALLERS.harbor), []);
+		assert.deepEqual(recallFrom([newest, middle, old], CALLERS.harbor), []);
+		assert.deepEqual(
+			recallFrom([old, middle, newest], CALLERS.atlas).map((m) => m.rel),
+			[newest.rel, middle.rel, old.rel],
+		);
+	});
+});
+
 /**
  * A capture the tool refused still has to reach someone.
  *

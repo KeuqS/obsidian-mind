@@ -27,7 +27,6 @@ import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { MEMORY_ROOT, MEMORY_SOURCE, AGENT_SOURCES } from "./memory-write.ts";
 import { parsePromotedMarker, type PromotedRef } from "./memory-promoted.ts";
-import { resolveSupersedes } from "./memory-supersede.ts";
 
 // Re-exported so a reader can take the marker from the module it reads with,
 // while the writer that stamps it stays the one place it is defined.
@@ -272,6 +271,49 @@ export function visibilityReason(facets: Facets | null | undefined, caller: Call
 /** How `explain` names this exclusion, kept apart from the scope reasons. */
 export const SUPERSEDED_OUT_OF_REACH = "superseded by a memory this caller cannot see";
 
+function titleKey(title: unknown): string {
+	return String(title ?? "").trim().toLowerCase();
+}
+
+function recencyKey(entry: MemoryEntry): string {
+	return `${entry.facets.date ?? ""}\u0000${entry.facets.session ?? ""}`;
+}
+
+/**
+ * Resolve replacement claims without allowing a same-title correction to point
+ * backwards or to itself. Claims for a different title keep the existing exact
+ * first-match behavior; only same-title matches need the newer-by-date rule.
+ */
+function replacementEntries(
+	entry: MemoryEntry,
+	corpus: readonly MemoryEntry[],
+): MemoryEntry[] {
+	const candidates = corpus.filter((candidate) => candidate.rel !== entry.rel);
+	const entryTitle = titleKey(entry.title);
+	const matched: MemoryEntry[] = [];
+
+	for (const claim of entry.facets.superseded_by) {
+		const needle = titleKey(claim);
+		if (!needle) continue;
+		const matches = candidates.filter(
+			(candidate) => titleKey(candidate.title) === needle,
+		);
+		if (matches.length === 0) continue;
+
+		if (needle !== entryTitle) {
+			matched.push(matches[0]!);
+			continue;
+		}
+
+		const newer = matches
+			.filter((candidate) => recencyKey(candidate) > recencyKey(entry))
+			.sort((a, b) => recencyKey(b).localeCompare(recencyKey(a)));
+		if (newer[0]) matched.push(newer[0]);
+	}
+
+	return matched;
+}
+
 /**
  * Does this memory's replacement fail to reach where the memory itself reaches?
  *
@@ -343,7 +385,7 @@ export function servedAfterSupersession(
 	const replacements = new Map<string, string[]>();
 	for (const entry of corpus) {
 		if (entry.facets.superseded_by.length === 0) continue;
-		const { matched } = resolveSupersedes(entry.facets.superseded_by, corpus);
+		const matched = replacementEntries(entry, corpus);
 		// Unresolvable claims leave the memory alone, per the rule above, so they
 		// are never entered here and can never be withheld.
 		if (matched.length === 0) continue;
